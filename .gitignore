@@ -167,6 +167,7 @@ venv.bak/
 # mkdocs documentation
 /site
 
+.deepeval/
 # mypy
 .mypy_cache/
 .dmypy.json
