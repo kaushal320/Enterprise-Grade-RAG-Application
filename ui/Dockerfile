@@ -10,5 +10,5 @@ RUN pip install --no-cache-dir \
 
 COPY . ./ui/
 
-# Honor dynamic $PORT environment variable set by cloud host (defaults to 8501)
-CMD sh -c "streamlit run ui/app.py --server.address=0.0.0.0 --server.port=${PORT:-8501}"
+# Honor dynamic $PORT environment variable set by cloud host (defaults to 8501) and disable fileWatcher
+CMD sh -c "streamlit run ui/app.py --server.address=0.0.0.0 --server.port=${PORT:-8501} --server.fileWatcherType=none"
