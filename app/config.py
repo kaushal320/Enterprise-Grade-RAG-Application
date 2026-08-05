@@ -14,7 +14,8 @@ class Settings:
     # Jina AI (Embedding & Reranker)
     JINA_API_KEY = os.getenv("JINA_API_KEY")
     JINA_EMBEDDING_MODEL = os.getenv("JINA_EMBEDDING_MODEL")
-    JINA_EMBEDDING_DIM = int(os.getenv("JINA_EMBEDDING_DIM"))
+    _dim = os.getenv("JINA_EMBEDDING_DIM")
+    JINA_EMBEDDING_DIM = int(_dim) if _dim else None
     JINA_RERANK_MODEL = os.getenv("JINA_RERANK_MODEL")
 
     # Neon PostgreSQL Database

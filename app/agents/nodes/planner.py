@@ -35,7 +35,18 @@ def planner_node(state: AgentState):
     """
     
     with logfire.span("🧠 Planner Decision"):
-        decision = llm.invoke(prompt).content.strip()
+        try:
+            decision = llm.invoke(prompt).content.strip()
+        except Exception as e:
+            logfire.warning(f"Portkey planner call failed ({e}), using ChatGroq fallback.")
+            from langchain_groq import ChatGroq
+            from app.config import settings
+            fallback_llm = ChatGroq(
+                api_key=settings.GROQ_API_KEY,
+                model="llama-3.1-8b-instant",
+                temperature=0
+            )
+            decision = fallback_llm.invoke(prompt).content.strip()
         logfire.info(f"Intent identified: {decision}")
     
     if decision == "CONVERSATIONAL":
