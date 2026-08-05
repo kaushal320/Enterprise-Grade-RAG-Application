@@ -5,12 +5,13 @@ import time
 import uuid
 import logfire
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Initialize Logfire
 try:
     logfire.configure(token=st.secrets.get("LOGFIRE_TOKEN", os.getenv("LOGFIRE_TOKEN")))
-    logfire.instrument_requests()   # propagates trace context to the FastAPI backend
+    logfire.instrument_requests()
     LOGFIRE_STATUS = "Connected & Tracing"
 except Exception:
     LOGFIRE_STATUS = "Standby (No Token)"
@@ -34,38 +35,50 @@ if "session_id" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- BACKEND URL ---
-base_url = os.getenv("BACKEND_URL", "").rstrip("/")
+# --- BACKEND URL & AUTOMATIC WAKE-UP ---
+def get_backend_url() -> str:
+    try:
+        url = st.secrets.get("BACKEND_URL")
+        if url:
+            return url.rstrip("/")
+    except Exception:
+        pass
+    return os.getenv("BACKEND_URL", "").rstrip("/")
 
+base_url = get_backend_url()
 
-def check_backend_alive(url: str, retries: int = 3, timeout: int = 30) -> bool:
-    """Ping backend health endpoint, retrying to wake Render free-tier cold starts."""
-    for attempt in range(retries):
+def wake_and_ping_backend(url: str, retries: int = 6, retry_delay: int = 5) -> bool:
+    """
+    Pings backend health endpoint. Automatically triggers Render cold-start wake-up
+    and continuously retries until backend is fully live.
+    """
+    if not url:
+        return False
+    for attempt in range(1, retries + 1):
         try:
-            r = requests.get(f"{url}/", timeout=timeout)
+            r = requests.get(f"{url}/", timeout=12)
             if r.status_code == 200:
                 return True
         except Exception:
             pass
-        time.sleep(5)
+        if attempt < retries:
+            time.sleep(retry_delay)
     return False
-
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.title("🧠 Agent OS")
     st.markdown("---")
 
-    # Show backend connectivity status
     if not base_url:
         st.error("⚠️ BACKEND_URL not set!")
     else:
-        with st.spinner("Checking backend..."):
-            backend_ok = check_backend_alive(base_url)
+        with st.spinner("⚡ Connecting to Backend (Waking Render server)..."):
+            backend_ok = wake_and_ping_backend(base_url, retries=4, retry_delay=4)
         if backend_ok:
-            st.success(f"✅ Backend Online")
+            st.success("✅ Backend Online")
         else:
-            st.error(f"❌ Backend Offline — check your Render service")
+            st.warning("⚠️ Backend Starting Up... (cold start in progress)")
         st.caption(f"API: {base_url}")
 
     st.markdown("---")
@@ -91,7 +104,7 @@ for message in st.session_state.messages:
 if prompt := st.chat_input("Ask about your documentation..."):
     # START TRACE: User Interaction
     with logfire.span("💬 User Chat Interaction", user_query=prompt, session_id=st.session_state.session_id):
-        
+
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar=USER_AVATAR):
             st.markdown(prompt)
@@ -104,7 +117,16 @@ if prompt := st.chat_input("Ask about your documentation..."):
                     with logfire.span("📡 Calling RAG Backend"):
                         url = f"{base_url}/query"
                         payload = {"q": prompt, "thread_id": st.session_state.session_id}
-                        response = requests.post(url, json=payload, timeout=60)
+
+                        # Attempt POST query, waking up server if sleeping on cold start
+                        try:
+                            response = requests.post(url, json=payload, timeout=60)
+                        except Exception:
+                            status.update(label="⚡ Server sleeping. Waking up Render backend...", state="running")
+                            if wake_and_ping_backend(base_url, retries=6, retry_delay=5):
+                                response = requests.post(url, json=payload, timeout=60)
+                            else:
+                                raise Exception("Backend server did not respond in time.")
 
                         if response.status_code != 200:
                             st.error(f"Backend Error: {response.status_code} - {response.text}")
@@ -121,7 +143,7 @@ if prompt := st.chat_input("Ask about your documentation..."):
                 except Exception as e:
                     logfire.error(f"❌ UI-Backend Connection Failed: {e}")
                     status.update(label="❌ Connection Failed", state="error")
-                    st.error("Backend Offline.")
+                    st.error("Backend Offline or waking up. Please try again in 10 seconds.")
                     st.stop()
 
             # Answer streaming — outside status so it's always visible
