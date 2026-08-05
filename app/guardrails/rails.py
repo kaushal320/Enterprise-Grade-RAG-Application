@@ -12,24 +12,28 @@ _rails: LLMRails | None = None
 def initialize_rails() -> None:
     """
     Build the NeMo LLMRails singleton at app startup.
-    Uses llama-3.1-8b-instant for fast intent classification at the gate —
-    the heavier llama-3.3-70b-versatile is reserved for the RAG pipeline.
+    Uses llama-3.1-8b-instant for fast intent classification at the gate.
+    Wrapped in try/except so a guardrails init failure won't crash the server.
     """
     global _rails
 
-    guard_llm = ChatGroq(
-        api_key=settings.GROQ_API_KEY,
-        model="llama-3.1-8b-instant",
-        temperature=0
-    )
+    try:
+        guard_llm = ChatGroq(
+            api_key=settings.GROQ_API_KEY,
+            model="llama-3.1-8b-instant",
+            temperature=0
+        )
 
-    config = RailsConfig.from_content(
-        colang_content=COLANG_CONTENT,
-        yaml_content=YAML_CONTENT
-    )
+        config = RailsConfig.from_content(
+            colang_content=COLANG_CONTENT,
+            yaml_content=YAML_CONTENT
+        )
 
-    _rails = LLMRails(config, llm=guard_llm)
-    logfire.info("🛡️ NeMo Guardrails initialised (llama-3.1-8b-instant).")
+        _rails = LLMRails(config, llm=guard_llm)
+        logfire.info("🛡️ NeMo Guardrails initialised (llama-3.1-8b-instant).")
+    except Exception as e:
+        logfire.error(f"⚠️ Guardrails failed to initialise (will run without gate): {e}")
+        _rails = None
     
     
 
