@@ -8,7 +8,10 @@ import uuid
 import logfire
 from dotenv import load_dotenv
 
-from ui.errors import BackendConnectionError, BackendTimeoutError
+try:
+    from ui.errors import BackendConnectionError, BackendTimeoutError
+except ImportError:
+    from errors import BackendConnectionError, BackendTimeoutError
 
 load_dotenv()
 

@@ -8,7 +8,10 @@ import uuid
 import logfire
 from dotenv import load_dotenv
 
-from ui.errors import BackendConnectionError, BackendTimeoutError
+try:
+    from ui.errors import BackendConnectionError, BackendTimeoutError
+except ImportError:
+    from errors import BackendConnectionError, BackendTimeoutError
 
 # Load environment variables explicitly from the root directory
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
