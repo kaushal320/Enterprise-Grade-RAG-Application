@@ -5,7 +5,7 @@ import time
 import uuid
 import logfire
 from dotenv import load_dotenv
-load_dotenv
+load_dotenv()
 
 # Initialize Logfire
 try:
@@ -34,16 +34,44 @@ if "session_id" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# --- BACKEND URL ---
+base_url = os.getenv("BACKEND_URL", "").rstrip("/")
+
+
+def check_backend_alive(url: str, retries: int = 3, timeout: int = 30) -> bool:
+    """Ping backend health endpoint, retrying to wake Render free-tier cold starts."""
+    for attempt in range(retries):
+        try:
+            r = requests.get(f"{url}/", timeout=timeout)
+            if r.status_code == 200:
+                return True
+        except Exception:
+            pass
+        time.sleep(5)
+    return False
+
+
 # --- SIDEBAR ---
 with st.sidebar:
     st.title("🧠 Agent OS")
     st.markdown("---")
 
-    base_url = os.getenv("BACKEND_URL")
+    # Show backend connectivity status
+    if not base_url:
+        st.error("⚠️ BACKEND_URL not set!")
+    else:
+        with st.spinner("Checking backend..."):
+            backend_ok = check_backend_alive(base_url)
+        if backend_ok:
+            st.success(f"✅ Backend Online")
+        else:
+            st.error(f"❌ Backend Offline — check your Render service")
+        st.caption(f"API: {base_url}")
+
     st.markdown("---")
     st.success(f"Logfire: {LOGFIRE_STATUS}")
     st.info(f"Memory ID: {st.session_state.session_id[:8]}")
-    
+
     if st.button("🗑️ Clear History & Memory", width="stretch", type="primary"):
         logfire.warning(f"🗑️ Memory Wipe Triggered for session: {st.session_state.session_id}")
         st.session_state.messages = []
