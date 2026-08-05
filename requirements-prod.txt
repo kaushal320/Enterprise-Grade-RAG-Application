@@ -25,12 +25,16 @@ langchain-community
 langchain-openai
 pydantic>=2.0.0
 
+# --- GUARDRAILS ---
+guardrails-ai
+
 # --- LLM GATEWAY ---
 portkey-ai
 
 # --- OBSERVABILITY ---
 langsmith
 logfire[fastapi,requests]
+loguru
 
 # --- INGESTION PARSERS ---
 python-pptx

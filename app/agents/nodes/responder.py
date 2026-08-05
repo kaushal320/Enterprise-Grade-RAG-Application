@@ -2,6 +2,12 @@ from app.config import settings
 import logfire
 from app.agents.state import AgentState
 from app.gateway import portkey_client, extract_cache_status
+from app.services.cache.upstash_service import (
+    get_cache,
+    set_cache,
+    response_cache_key,
+    RESPONSE_TTL_SECONDS,
+)
 
 
 def generate_node(state: AgentState):
@@ -18,6 +24,28 @@ def generate_node(state: AgentState):
         history_str += f"{role}: {msg['content']}\n"
 
     user_msg = state["messages"][-1]["content"] if state["messages"] else ""
+
+    if query == "CONVERSATIONAL":
+        context_for_key = history_str
+    else:
+        context_for_key = "\n".join(state["documents"])
+
+    cache_key = response_cache_key(user_msg, context_for_key)
+    cached_response = get_cache(cache_key)
+    if cached_response:
+        content = (
+            cached_response
+            if isinstance(cached_response, str)
+            else cached_response.get("final_answer", "")
+        )
+        if content:
+            logfire.info("⚡ Upstash response cache hit — skipping LLM synthesis.")
+            return {
+                "final_answer": content,
+                "status": "Upstash cache hit — instant response.",
+                "plan": state["plan"] + ["Response Cache: Hit ⚡"],
+                "messages": [{"role": "assistant", "content": content}],
+            }
 
     if query == "CONVERSATIONAL":
         logfire.info("Generating conversational response using memory.")
@@ -91,6 +119,8 @@ def generate_node(state: AgentState):
             logfire.info("✅ Response synthesised via LLM.")
             plan_update = state["plan"]
             status = "Response generated."
+
+        set_cache(cache_key, content, ttl_seconds=RESPONSE_TTL_SECONDS)
 
         return {
             "final_answer": content,
