@@ -1,5 +1,5 @@
 # ==============================================================================
-# PRODUCTION REQUIREMENTS — Lightweight (Hosted API Services)
+# PRODUCTION REQUIREMENTS — Hosted API Services
 # All AI models (Embeddings, Reranker, LLM) run hosted in the cloud.
 # ==============================================================================
 
@@ -24,6 +24,9 @@ langchain-groq
 langchain-community
 langchain-openai
 pydantic>=2.0.0
+
+# --- GUARDRAILS ---
+nemoguardrails
 
 # --- LLM GATEWAY ---
 portkey-ai
