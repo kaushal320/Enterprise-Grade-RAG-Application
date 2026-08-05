@@ -26,7 +26,7 @@ langchain-openai
 pydantic>=2.0.0
 
 # --- GUARDRAILS ---
-nemoguardrails
+guardrails-ai
 
 # --- LLM GATEWAY ---
 portkey-ai
