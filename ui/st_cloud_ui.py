@@ -1,10 +1,14 @@
 import os
 import streamlit as st
 import requests
+from requests.exceptions import RequestException
+from json import JSONDecodeError
 import time
 import uuid
 import logfire
 from dotenv import load_dotenv
+
+from ui.errors import BackendConnectionError, BackendTimeoutError
 
 load_dotenv()
 
@@ -13,7 +17,8 @@ try:
     logfire.configure(token=st.secrets.get("LOGFIRE_TOKEN", os.getenv("LOGFIRE_TOKEN")))
     logfire.instrument_requests()
     LOGFIRE_STATUS = "Connected & Tracing"
-except Exception:
+except (AttributeError, KeyError, Exception) as e:  # noqa: BLE001
+    logfire.error(f"Logfire init failed: {e}")
     LOGFIRE_STATUS = "Standby (No Token)"
 
 # --- PAGE CONFIG ---
@@ -41,7 +46,7 @@ def get_backend_url() -> str:
         url = st.secrets.get("BACKEND_URL")
         if url:
             return url.rstrip("/")
-    except Exception:
+    except (AttributeError, KeyError, FileNotFoundError):
         pass
     return os.getenv("BACKEND_URL", "").rstrip("/")
 
@@ -59,8 +64,8 @@ def wake_and_ping_backend(url: str, retries: int = 6, retry_delay: int = 5) -> b
             r = requests.get(f"{url}/", timeout=12)
             if r.status_code == 200:
                 return True
-        except Exception:
-            pass
+        except RequestException as e:
+            logfire.debug(f"Backend ping attempt {attempt} failed: {e}")
         if attempt < retries:
             time.sleep(retry_delay)
     return False
@@ -121,18 +126,28 @@ if prompt := st.chat_input("Ask about your documentation..."):
                         # Attempt POST query, waking up server if sleeping on cold start
                         try:
                             response = requests.post(url, json=payload, timeout=60)
-                        except Exception:
+                        except RequestException as e:
+                            logfire.debug(f"Initial POST failed, attempting wake-and-retry: {e}")
                             status.update(label="⚡ Server sleeping. Waking up Render backend...", state="running")
                             if wake_and_ping_backend(base_url, retries=6, retry_delay=5):
-                                response = requests.post(url, json=payload, timeout=60)
+                                try:
+                                    response = requests.post(url, json=payload, timeout=60)
+                                except RequestException as e2:
+                                    logfire.error(f"Retry POST failed: {e2}")
+                                    raise BackendConnectionError("Backend POST retry failed.") from e2
                             else:
-                                raise Exception("Backend server did not respond in time.")
+                                raise BackendTimeoutError("Backend server did not respond in time.") from e
 
                         if response.status_code != 200:
                             st.error(f"Backend Error: {response.status_code} - {response.text}")
                             st.stop()
 
-                        data = response.json()
+                        try:
+                            data = response.json()
+                        except JSONDecodeError as e:
+                            logfire.error(f"Invalid JSON received from backend: {e}")
+                            st.error("Backend sent invalid JSON response.")
+                            st.stop()
 
                     steps = data.get("thought_process", [])
                     for step in steps:
@@ -140,7 +155,7 @@ if prompt := st.chat_input("Ask about your documentation..."):
 
                     status.update(label="✅ Answer Synthesized", state="complete", expanded=False)
 
-                except Exception as e:
+                except (BackendConnectionError, BackendTimeoutError, RequestException) as e:
                     logfire.error(f"❌ UI-Backend Connection Failed: {e}")
                     status.update(label="❌ Connection Failed", state="error")
                     st.error("Backend Offline or waking up. Please try again in 10 seconds.")
