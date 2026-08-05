@@ -10,6 +10,5 @@ RUN pip install --no-cache-dir \
 
 COPY . ./ui/
 
-EXPOSE 8501
-
-CMD ["streamlit", "run", "ui/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+# Honor dynamic $PORT environment variable set by cloud host (defaults to 8501)
+CMD sh -c "streamlit run ui/app.py --server.address=0.0.0.0 --server.port=${PORT:-8501}"
