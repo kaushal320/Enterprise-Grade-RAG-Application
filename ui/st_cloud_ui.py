@@ -4,7 +4,8 @@ import requests
 import time
 import uuid
 import logfire
-
+from dotenv import load_dotenv
+load_dotenv
 
 # Initialize Logfire
 try:
@@ -38,8 +39,7 @@ with st.sidebar:
     st.title("🧠 Agent OS")
     st.markdown("---")
 
-    base_url = "http://localhost:8000"
-
+    base_url = os.getenv("BACKEND_URL")
     st.markdown("---")
     st.success(f"Logfire: {LOGFIRE_STATUS}")
     st.info(f"Memory ID: {st.session_state.session_id[:8]}")
