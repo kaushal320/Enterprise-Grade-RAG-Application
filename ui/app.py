@@ -64,6 +64,7 @@ def get_backend_url() -> str:
         pass
     return os.getenv("BACKEND_URL", "").rstrip("/")
 
+
 base_url = get_backend_url()
 
 
@@ -77,10 +78,14 @@ def wake_and_ping_backend(url: str, retries: int = 15, retry_delay: int = 5) -> 
     target_url = f"{url.rstrip('/')}/"
     for attempt in range(1, retries + 1):
         try:
-            r = requests.get(target_url, headers=HTTP_HEADERS, timeout=15, allow_redirects=True)
+            r = requests.get(
+                target_url, headers=HTTP_HEADERS, timeout=15, allow_redirects=True
+            )
             if r.status_code == 200:
                 return True
-            logfire.debug(f"Backend ping attempt {attempt}: status {r.status_code} (still booting)")
+            logfire.debug(
+                f"Backend ping attempt {attempt}: status {r.status_code} (still booting)"
+            )
         except RequestException as e:
             logfire.debug(f"Backend ping attempt {attempt}: connection error ({e})")
         if attempt < retries:
@@ -98,13 +103,30 @@ with st.sidebar:
     if not base_url:
         st.error("⚠️ BACKEND_URL not configured!")
 
-    # ── IDLE: Show the "Start Backend" button ──
+    # ── IDLE: Show the "Start Backend" button ──────────────────────────────────────────────
     elif st.session_state.backend_status == "idle":
         st.info(
-            "**Backend is on Render Free Tier.**\n\n"
-            "It spins down when idle. Click the button below to wake it up before chatting."
+            "**Backend is hosted on Render Free Tier.**\n\n"
+            "Click the button below. A new tab will open to wake the backend. "
+            "Return here while the app waits for it to come online."
         )
-        if st.button("🚀 Start Backend", type="primary", use_container_width=True):
+
+        # Opens the backend in a new tab
+        st.link_button(
+            "🚀 Start Backend",
+            base_url,
+            use_container_width=True,
+        )
+
+        st.caption(
+            "After the new tab opens, come back to this page and click the button below."
+        )
+
+        if st.button(
+            "✅ Backend Started",
+            type="primary",
+            use_container_width=True,
+        ):
             st.session_state.backend_status = "starting"
             st.rerun()
 
@@ -118,7 +140,12 @@ with st.sidebar:
                 f"_Render free-tier cold start takes 30-90 seconds. Please wait..._"
             )
             try:
-                r = requests.get(f"{base_url}/", headers=HTTP_HEADERS, timeout=15, allow_redirects=True)
+                r = requests.get(
+                    f"{base_url}/",
+                    headers=HTTP_HEADERS,
+                    timeout=15,
+                    allow_redirects=True,
+                )
                 if r.status_code == 200:
                     st.session_state.backend_status = "online"
                     progress_slot.empty()
@@ -169,8 +196,7 @@ st.title("🤖 Enterprise Agentic Assistant")
 # If backend is not online yet, show a welcome screen instead of the input
 if st.session_state.backend_status != "online":
     st.markdown("---")
-    st.markdown(
-        """
+    st.markdown("""
         ### 👋 Welcome to the Enterprise Agentic RAG Assistant
 
         This assistant answers questions on **Kubernetes**, **Intel Hardware**, and **Enterprise Networking**
@@ -180,8 +206,7 @@ if st.session_state.backend_status != "online":
         1. Click **🚀 Start Backend** in the sidebar to wake up the Render server.
         2. Wait ~30-60 seconds for the cold start to complete.
         3. Start chatting!
-        """
-    )
+        """)
     st.stop()
 
 # Display chat history
@@ -192,7 +217,11 @@ for message in st.session_state.messages:
 
 # Chat Input
 if prompt := st.chat_input("Ask about your documentation..."):
-    with logfire.span("💬 User Chat Interaction", user_query=prompt, session_id=st.session_state.session_id):
+    with logfire.span(
+        "💬 User Chat Interaction",
+        user_query=prompt,
+        session_id=st.session_state.session_id,
+    ):
 
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar=USER_AVATAR):
@@ -204,25 +233,47 @@ if prompt := st.chat_input("Ask about your documentation..."):
                 try:
                     with logfire.span("📡 Calling RAG Backend"):
                         query_url = f"{base_url}/query"
-                        payload = {"q": prompt, "thread_id": st.session_state.session_id}
+                        payload = {
+                            "q": prompt,
+                            "thread_id": st.session_state.session_id,
+                        }
 
                         try:
-                            response = requests.post(query_url, json=payload, headers=HTTP_HEADERS, timeout=60)
+                            response = requests.post(
+                                query_url,
+                                json=payload,
+                                headers=HTTP_HEADERS,
+                                timeout=60,
+                            )
                         except RequestException as e:
                             logfire.debug(f"Initial POST failed, wake-and-retry: {e}")
-                            status.update(label="⚡ Backend sleeping. Retrying...", state="running")
+                            status.update(
+                                label="⚡ Backend sleeping. Retrying...",
+                                state="running",
+                            )
                             if wake_and_ping_backend(base_url):
                                 try:
-                                    response = requests.post(query_url, json=payload, headers=HTTP_HEADERS, timeout=60)
+                                    response = requests.post(
+                                        query_url,
+                                        json=payload,
+                                        headers=HTTP_HEADERS,
+                                        timeout=60,
+                                    )
                                 except RequestException as e2:
                                     logfire.error(f"Retry POST failed: {e2}")
-                                    raise BackendConnectionError("Backend POST retry failed.") from e2
+                                    raise BackendConnectionError(
+                                        "Backend POST retry failed."
+                                    ) from e2
                             else:
                                 st.session_state.backend_status = "failed"
-                                raise BackendTimeoutError("Backend did not respond in time.") from e
+                                raise BackendTimeoutError(
+                                    "Backend did not respond in time."
+                                ) from e
 
                         if response.status_code != 200:
-                            st.error(f"Backend Error: {response.status_code} - {response.text[:300]}")
+                            st.error(
+                                f"Backend Error: {response.status_code} - {response.text[:300]}"
+                            )
                             st.stop()
 
                         try:
@@ -235,12 +286,20 @@ if prompt := st.chat_input("Ask about your documentation..."):
                     for step in data.get("thought_process", []):
                         st.write(f"⚙️ {step}")
 
-                    status.update(label="✅ Answer Synthesized", state="complete", expanded=False)
+                    status.update(
+                        label="✅ Answer Synthesized", state="complete", expanded=False
+                    )
 
-                except (BackendConnectionError, BackendTimeoutError, RequestException) as e:
+                except (
+                    BackendConnectionError,
+                    BackendTimeoutError,
+                    RequestException,
+                ) as e:
                     logfire.error(f"❌ UI-Backend Connection Failed: {e}")
                     status.update(label="❌ Connection Failed", state="error")
-                    st.error("Backend went offline. Click **🔄 Retry** in the sidebar to reconnect.")
+                    st.error(
+                        "Backend went offline. Click **🔄 Retry** in the sidebar to reconnect."
+                    )
                     st.stop()
 
             # Streaming answer
@@ -262,5 +321,7 @@ if prompt := st.chat_input("Ask about your documentation..."):
                         with st.expander(f"Chunk {i+1}: {preview}"):
                             st.info(source)
 
-            st.session_state.messages.append({"role": "assistant", "content": full_answer})
+            st.session_state.messages.append(
+                {"role": "assistant", "content": full_answer}
+            )
             logfire.info("✅ Chat cycle completed.")
