@@ -13,11 +13,12 @@ try:
 except ImportError:
     from errors import BackendConnectionError, BackendTimeoutError
 
-# Load environment variables explicitly from the root directory
+# ─────────────────────────────────────────────
+# ENV + LOGFIRE
+# ─────────────────────────────────────────────
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
 load_dotenv(dotenv_path=env_path)
 
-# Initialize Logfire
 try:
     token = os.getenv("LOGFIRE_TOKEN")
     logfire.configure(token=token)
@@ -27,34 +28,90 @@ except Exception as e:  # noqa: BLE001
 
 # --- PAGE CONFIG ---
 st.set_page_config(
-    page_title="Enterprise Agentic RAG",
-    page_icon="🤖",
+    page_title="Kubernetes RAG Assistant",
+    page_icon="☸️",
     layout="wide",
 )
 
-# --- AVATARS ---
-AI_AVATAR = "🤖"
+AI_AVATAR = "☸️"
 USER_AVATAR = "👤"
 
-# --- BROWSER HEADERS ---
 HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
 }
 
+# ─────────────────────────────────────────────
+# STYLING
+# ─────────────────────────────────────────────
+st.markdown(
+    """
+    <style>
+    .stApp { background-color: #0b1220; }
+
+    /* Pipeline trace */
+    .pipe-step {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        margin-bottom: 6px;
+        background: rgba(255,255,255,0.03);
+        border-left: 3px solid #326ce5;
+    }
+    .pipe-step.blocked { border-left-color: #e5484d; background: rgba(229,72,77,0.08); }
+    .pipe-step.ok { border-left-color: #30a46c; }
+    .pipe-icon { font-size: 1.1rem; }
+    .pipe-name { font-weight: 600; color: #e6e6e6; }
+    .pipe-detail { color: #9aa4b2; font-size: 0.85rem; }
+    .pipe-time { margin-left: auto; color: #6b7684; font-size: 0.78rem; white-space: nowrap; }
+
+    /* Guardrail badge */
+    .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+    }
+    .badge-pass { background: rgba(48,164,108,0.15); color: #30a46c; border: 1px solid #30a46c; }
+    .badge-block { background: rgba(229,72,77,0.15); color: #e5484d; border: 1px solid #e5484d; }
+
+    /* Chunk cards */
+    .chunk-card {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-bottom: 8px;
+        background: rgba(50,108,229,0.05);
+    }
+    .chunk-rank {
+        display: inline-block;
+        background: #326ce5;
+        color: white;
+        border-radius: 6px;
+        padding: 1px 8px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        margin-right: 8px;
+    }
+    .chunk-score { color: #9aa4b2; font-size: 0.8rem; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # --- SESSION STATE INIT ---
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
-
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
-# "idle" | "starting" | "online" | "failed"
 if "backend_status" not in st.session_state:
-    st.session_state.backend_status = "idle"
+    st.session_state.backend_status = "idle"  # idle | starting | online | failed
 
 
-# --- BACKEND URL ---
 def get_backend_url() -> str:
     try:
         url = st.secrets.get("BACKEND_URL")
@@ -69,10 +126,6 @@ base_url = get_backend_url()
 
 
 def wake_and_ping_backend(url: str, retries: int = 15, retry_delay: int = 5) -> bool:
-    """
-    Pings backend health endpoint, treating 502 as 'still booting' and retrying.
-    Returns True only on HTTP 200.
-    """
     if not url:
         return False
     target_url = f"{url.rstrip('/')}/"
@@ -94,43 +147,130 @@ def wake_and_ping_backend(url: str, retries: int = 15, retry_delay: int = 5) -> 
 
 
 # ─────────────────────────────────────────────
+# HELPERS FOR PIPELINE / GUARDRAILS / CHUNK RENDERING
+# ─────────────────────────────────────────────
+STEP_ICONS = {
+    "guardrails": "🛡️",
+    "planner": "🧠",
+    "retrieval": "🔍",
+    "reranking": "⚖️",
+    "synthesis": "✍️",
+    "cache": "🗃️",
+    "default": "⚙️",
+}
+
+
+def icon_for(step_name: str) -> str:
+    name = step_name.lower()
+    for key, icon in STEP_ICONS.items():
+        if key in name:
+            return icon
+    return STEP_ICONS["default"]
+
+
+def render_guardrails_badge(guardrails: dict):
+    """guardrails = {'status': 'passed'|'blocked', 'category': str, 'duration_ms': int}"""
+    status = guardrails.get("status", "passed")
+    category = guardrails.get("category")
+    duration = guardrails.get("duration_ms")
+    if status == "blocked":
+        label = f'<span class="badge badge-block">🛡️ BLOCKED{f" · {category}" if category else ""}</span>'
+    else:
+        label = '<span class="badge badge-pass">🛡️ GUARDRAILS PASSED</span>'
+    if duration:
+        label += f'  <span class="pipe-time">{duration} ms</span>'
+    st.markdown(label, unsafe_allow_html=True)
+
+
+def render_pipeline(pipeline: list):
+    """
+    pipeline = [
+      {"name": "Guardrails Check", "detail": "...", "duration_ms": 871, "status": "ok"|"blocked"},
+      ...
+    ]
+    """
+    for step in pipeline:
+        name = step.get("name", "Step")
+        detail = step.get("detail", "")
+        duration = step.get("duration_ms")
+        status = step.get("status", "ok")
+        css_class = "blocked" if status == "blocked" else "ok"
+        time_html = f'<span class="pipe-time">{duration} ms</span>' if duration else ""
+        st.markdown(
+            f"""
+            <div class="pipe-step {css_class}">
+                <span class="pipe-icon">{icon_for(name)}</span>
+                <span class="pipe-name">{name}</span>
+                <span class="pipe-detail">{detail}</span>
+                {time_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_sources(sources: list):
+    """
+    Accepts either:
+      - list[str]  (legacy: raw chunk text)
+      - list[dict] with keys like text/content, score, rank, source/url
+    """
+    for i, source in enumerate(sources):
+        if isinstance(source, dict):
+            text = source.get("text") or source.get("content") or ""
+            score = source.get("score")
+            origin = (
+                source.get("source")
+                or source.get("url")
+                or source.get("metadata", {}).get("source")
+            )
+        else:
+            text = str(source)
+            score = None
+            origin = None
+
+        preview = text[:110].replace("\n", " ").strip() + (
+            "..." if len(text) > 110 else ""
+        )
+        score_html = (
+            f'<span class="chunk-score">score {score:.3f}</span>'
+            if isinstance(score, (int, float))
+            else ""
+        )
+
+        with st.expander(f"Chunk {i + 1} — {preview}"):
+            st.markdown(
+                f'<span class="chunk-rank">#{i + 1}</span> {score_html}',
+                unsafe_allow_html=True,
+            )
+            if origin:
+                st.caption(f"Source: {origin}")
+            st.info(text)
+
+
+# ─────────────────────────────────────────────
 # SIDEBAR
 # ─────────────────────────────────────────────
 with st.sidebar:
-    st.title("🧠 Agent OS")
+    st.title("☸️ Agent OS")
+    st.caption("Kubernetes Docs RAG · LangGraph + Qdrant + Jina Rerank")
     st.markdown("---")
 
     if not base_url:
         st.error("⚠️ BACKEND_URL not configured!")
-
-    # ── IDLE: Show the "Start Backend" button ──────────────────────────────────────────────
     elif st.session_state.backend_status == "idle":
         st.info(
             "**Backend is hosted on Render Free Tier.**\n\n"
             "Click the button below. A new tab will open to wake the backend. "
             "Return here while the app waits for it to come online."
         )
-
-        # Opens the backend in a new tab
-        st.link_button(
-            "🚀 Start Backend",
-            base_url,
-            use_container_width=True,
-        )
-
+        st.link_button("🚀 Start Backend", base_url, use_container_width=True)
         st.caption(
             "After the new tab opens, come back to this page and click the button below."
         )
-
-        if st.button(
-            "✅ Backend Started",
-            type="primary",
-            use_container_width=True,
-        ):
+        if st.button("✅ Backend Started", type="primary", use_container_width=True):
             st.session_state.backend_status = "starting"
             st.rerun()
-
-    # ── STARTING: Show live wake-up progress ──
     elif st.session_state.backend_status == "starting":
         progress_slot = st.empty()
         for attempt in range(1, 16):
@@ -157,21 +297,15 @@ with st.sidebar:
             if attempt < 15:
                 time.sleep(5)
         else:
-            # All retries exhausted
             st.session_state.backend_status = "failed"
             progress_slot.empty()
             st.rerun()
-
-    # ── ONLINE ──
     elif st.session_state.backend_status == "online":
         st.success("✅ Backend Online")
         st.caption(f"API: {base_url}")
-
-    # ── FAILED ──
     elif st.session_state.backend_status == "failed":
         st.error(
-            "❌ Backend did not respond after 75s.\n\n"
-            "Render may be overloaded. Try starting again."
+            "❌ Backend did not respond after 75s.\n\nRender may be overloaded. Try starting again."
         )
         if st.button("🔄 Retry", type="secondary", use_container_width=True):
             st.session_state.backend_status = "starting"
@@ -179,28 +313,31 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(f"Logfire: {LOGFIRE_STATUS}")
-    st.info(f"Memory ID: `{st.session_state.session_id[:8]}`")
+    st.info(f"Session ID: `{st.session_state.session_id[:8]}`")
 
+    st.markdown("---")
+    show_pipeline_default = st.toggle("Show pipeline trace by default", value=True)
+    show_chunks_default = st.toggle("Show retrieved chunks by default", value=False)
+
+    st.markdown("---")
     if st.button("🗑️ Clear History & Memory", type="primary", use_container_width=True):
         logfire.warning(f"🗑️ Memory Wipe: session={st.session_state.session_id}")
         st.session_state.messages = []
         st.session_state.session_id = str(uuid.uuid4())
         st.rerun()
 
-
 # ─────────────────────────────────────────────
 # MAIN CHAT
 # ─────────────────────────────────────────────
-st.title("🤖 Enterprise Agentic Assistant")
+st.title("☸️ Kubernetes RAG Assistant")
 
-# If backend is not online yet, show a welcome screen instead of the input
 if st.session_state.backend_status != "online":
     st.markdown("---")
     st.markdown("""
-        ### 👋 Welcome to the Enterprise Agentic RAG Assistant
+        ### 👋 Welcome to the Kubernetes RAG Assistant
 
-        This assistant answers questions on **Kubernetes**, **Intel Hardware**, and **Enterprise Networking**
-        using a full **LangGraph RAG pipeline** with semantic reranking and memory.
+        Ask questions about **Kubernetes** docs and get answers backed by a full
+        **LangGraph** pipeline: guardrails → planning → retrieval → reranking → synthesis.
 
         **To get started:**
         1. Click **🚀 Start Backend** in the sidebar to wake up the Render server.
@@ -209,14 +346,28 @@ if st.session_state.backend_status != "online":
         """)
     st.stop()
 
-# Display chat history
+# Display chat history (replays stored pipeline/sources/guardrails per turn)
 for message in st.session_state.messages:
     avatar = AI_AVATAR if message["role"] == "assistant" else USER_AVATAR
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
+        if message["role"] == "assistant":
+            guardrails = message.get("guardrails")
+            pipeline = message.get("pipeline")
+            sources = message.get("sources")
+            if guardrails:
+                render_guardrails_badge(guardrails)
+            if pipeline:
+                with st.expander("🔎 Pipeline trace", expanded=False):
+                    render_pipeline(pipeline)
+            if sources:
+                with st.expander(
+                    f"📄 Retrieved chunks ({len(sources)})", expanded=False
+                ):
+                    render_sources(sources)
 
 # Chat Input
-if prompt := st.chat_input("Ask about your documentation..."):
+if prompt := st.chat_input("Ask about Kubernetes..."):
     with logfire.span(
         "💬 User Chat Interaction",
         user_query=prompt,
@@ -283,12 +434,32 @@ if prompt := st.chat_input("Ask about your documentation..."):
                             st.error("Backend sent invalid JSON.")
                             st.stop()
 
-                    for step in data.get("thought_process", []):
-                        st.write(f"⚙️ {step}")
+                    # Live step-by-step trace inside the "thinking" status box.
+                    # Supports a rich `pipeline` array; falls back to legacy `thought_process`.
+                    guardrails = data.get("guardrails")
+                    pipeline = data.get("pipeline") or [
+                        {"name": step, "status": "ok"}
+                        for step in data.get("thought_process", [])
+                    ]
 
-                    status.update(
-                        label="✅ Answer Synthesized", state="complete", expanded=False
-                    )
+                    if guardrails:
+                        render_guardrails_badge(guardrails)
+                    if pipeline:
+                        render_pipeline(pipeline)
+
+                    blocked = bool(guardrails) and guardrails.get("status") == "blocked"
+                    if blocked:
+                        status.update(
+                            label="🛡️ Blocked by guardrails",
+                            state="error",
+                            expanded=True,
+                        )
+                    else:
+                        status.update(
+                            label="✅ Answer Synthesized",
+                            state="complete",
+                            expanded=show_pipeline_default,
+                        )
 
                 except (
                     BackendConnectionError,
@@ -312,16 +483,23 @@ if prompt := st.chat_input("Ask about your documentation..."):
                 time.sleep(0.005)
             answer_placeholder.markdown(full_answer)
 
-            # Sources
+            # Sources / retrieved chunks
             sources = data.get("sources", [])
             if sources:
-                with st.expander(f"📄 View Retrieved Context ({len(sources)} sources)"):
-                    for i, source in enumerate(sources):
-                        preview = source[:100].replace("\n", " ") + "..."
-                        with st.expander(f"Chunk {i+1}: {preview}"):
-                            st.info(source)
+                with st.expander(
+                    f"📄 Retrieved chunks ({len(sources)})",
+                    expanded=show_chunks_default,
+                ):
+                    render_sources(sources)
 
+            # Persist everything so history replay shows the same trace
             st.session_state.messages.append(
-                {"role": "assistant", "content": full_answer}
+                {
+                    "role": "assistant",
+                    "content": full_answer,
+                    "guardrails": guardrails,
+                    "pipeline": pipeline,
+                    "sources": sources,
+                }
             )
             logfire.info("✅ Chat cycle completed.")
