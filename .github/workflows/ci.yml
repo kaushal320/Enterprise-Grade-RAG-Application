@@ -58,6 +58,7 @@ jobs:
           GROQ_API_KEY: "mock_groq_key"
           JINA_API_KEY: "mock_jina_key"
           QDRANT_API_KEY: "mock_qdrant_key"
+          PORTKEY_API_KEY: "mock_portkey_key"
         run: |
           pytest tests/ -v
 
@@ -112,6 +113,7 @@ jobs:
           QDRANT_URL: ${{ secrets.QDRANT_URL }}
           QDRANT_COLLECTION_NAME: ${{ secrets.QDRANT_COLLECTION_NAME }}
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+          PORTKEY_API_KEY: ${{ secrets.PORTKEY_API_KEY }}
         run: |
           python evals/ci_ragas_gate.py --golden evals/golden_dataset.json
 
