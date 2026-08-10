@@ -19,7 +19,7 @@ Exit codes:
 
 Run:
     python evals/ci_ragas_gate.py
-    python evals/ci_ragas_gate.py --golden path/to/dataset.json --samples 5 --threshold 0.6
+    python evals/ci_ragas_gate.py --golden path/to/dataset.json --samples 3 --threshold 0.6
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ from app.agents.graph import rag_agent
 # Config
 # ─────────────────────────────────────────────────────────────────────────────
 DEFAULT_GOLDEN = Path(__file__).resolve().parent / "golden_dataset.json"
-DEFAULT_SAMPLES = 5
+DEFAULT_SAMPLES = 3
 DEFAULT_THRESHOLD = 0.6
 
 # llama-3.1-8b-instant is too weak as an NLI judge: it returns "unsupported"
@@ -68,9 +68,15 @@ JINA_EMBEDDING_MODEL = "jina-embeddings-v3"
 
 CONTENT_PREFIX = "CONTENT: "  # prefix retrieve_node prepends to every document
 
+# Judge inputs are trimmed (mirroring evals/metrics.py) to stay inside the
+# Groq 70b on_demand tokens-per-day cap (~100k): fewer samples + only the
+# top-2 contexts at 300 chars each keeps a full gate run near ~17k tokens.
+CONTEXT_TRUNCATE = 300  # chars per context chunk passed to the judge
+CONTEXT_LIMIT = 2       # max context chunks passed to the judge
+
 # The 70b judge (and the agent's 70b planner/responder) all draw on the same
-# Groq on_demand TPM budget. Interleave calls so no 60s window overflows —
-# Faithfulness alone makes two judge calls per sample (statements + verdicts).
+# Groq budget. Interleave calls so no 60s TPM window overflows — Faithfulness
+# alone makes two judge calls per sample (statements + verdicts).
 DELAY_BETWEEN_SAMPLES = 8  # seconds between agent runs
 DELAY_BETWEEN_JUDGE_CALLS = 12  # seconds between per-sample RAGAS judge calls
 JUDGE_RETRIES = 4  # attempts per RAGAS score on transient API errors
@@ -200,12 +206,16 @@ def score_samples(samples: list, judge_llm, embeddings) -> list[dict]:
             print("  ⚠️ No retrieved contexts — faithfulness scored as 0.0.")
             fth_score = 0.0
         else:
+            # Trim contexts for the judge (budget + metrics.py parity): the
+            # top chunks hold the answer's evidence, and Faithfulness's verdict
+            # call is the gate's largest token consumer.
+            judge_contexts = [c[:CONTEXT_TRUNCATE] for c in contexts[:CONTEXT_LIMIT]]
             fth_score = _score_with_retry(
                 faithfulness,
                 {
                     "user_input": question,
                     "response": answer,
-                    "retrieved_contexts": contexts,
+                    "retrieved_contexts": judge_contexts,
                 },
                 "Faithfulness",
             )
@@ -247,7 +257,7 @@ def main(argv: list | None = None) -> int:
         "--samples",
         type=int,
         default=DEFAULT_SAMPLES,
-        help="Number of leading RAG samples to evaluate (default: 5).",
+        help="Number of leading RAG samples to evaluate (default: 3).",
     )
     parser.add_argument(
         "--threshold",

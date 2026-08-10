@@ -107,8 +107,9 @@ jobs:
       # path, which langchain-community removed in 0.4.0 — so pin <0.4.0 or the
       # `import ragas` at the top of ci_ragas_gate.py fails.
       # Live gate: imports the compiled LangGraph agent in-process (no HTTP),
-      # runs the first 5 golden RAG samples, and scores Faithfulness +
-      # AnswerRelevancy. Fails the build if either average drops below 0.6.
+      # runs the first 3 golden RAG samples (kept small to stay inside the Groq
+      # 70b daily token cap), and scores Faithfulness + AnswerRelevancy. Fails
+      # the build if either average drops below 0.6.
       - name: Run RAGAS Eval Gate
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
