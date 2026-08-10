@@ -100,8 +100,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt
-          pip install ragas==0.4.3 langchain-google-vertexai
+          pip install ragas==0.4.3 langchain-google-vertexai "langchain-community<0.4.0"
 
+
+      # ragas==0.4.3 imports the legacy langchain_community.chat_models.vertexai
+      # path, which langchain-community removed in 0.4.0 — so pin <0.4.0 or the
+      # `import ragas` at the top of ci_ragas_gate.py fails.
       # Live gate: imports the compiled LangGraph agent in-process (no HTTP),
       # runs the first 5 golden RAG samples, and scores Faithfulness +
       # AnswerRelevancy. Fails the build if either average drops below 0.6.
