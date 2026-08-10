@@ -44,12 +44,12 @@ if os.getenv("LOGFIRE_TOKEN"):
 
     logfire.configure(token=os.getenv("LOGFIRE_TOKEN"), service_name="ci_ragas_gate")
 
-from app.agents.graph import rag_agent
-
 from openai import AsyncOpenAI
-from ragas.llms import llm_factory
 from ragas.embeddings import OpenAIEmbeddings
-from ragas.metrics.collections import Faithfulness, AnswerRelevancy
+from ragas.llms import llm_factory
+from ragas.metrics.collections import AnswerRelevancy, Faithfulness
+
+from app.agents.graph import rag_agent
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Config
@@ -58,18 +58,22 @@ DEFAULT_GOLDEN = Path(__file__).resolve().parent / "golden_dataset.json"
 DEFAULT_SAMPLES = 5
 DEFAULT_THRESHOLD = 0.6
 
-JUDGE_MODEL = "llama-3.1-8b-instant"
+# llama-3.1-8b-instant is too weak as an NLI judge: it returns "unsupported"
+# for every claim even when the context explicitly contains it, collapsing
+# Faithfulness to 0.0. Use the 70b model so verdicts are actually grounded.
+JUDGE_MODEL = "llama-3.3-70b-versatile"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 JINA_BASE_URL = "https://api.jina.ai/v1"
 JINA_EMBEDDING_MODEL = "jina-embeddings-v3"
 
 CONTENT_PREFIX = "CONTENT: "  # prefix retrieve_node prepends to every document
 
-# Groq on_demand tier throttles at 6,000 TPM — small interleaves keep the
-# planner/responder bursts and the RAGAS judge bursts under the ceiling.
-DELAY_BETWEEN_SAMPLES = 3  # seconds between agent runs
-DELAY_BETWEEN_JUDGE_CALLS = 2  # seconds between per-sample RAGAS scores
-JUDGE_RETRIES = 3  # attempts per RAGAS score on transient API errors
+# The 70b judge (and the agent's 70b planner/responder) all draw on the same
+# Groq on_demand TPM budget. Interleave calls so no 60s window overflows —
+# Faithfulness alone makes two judge calls per sample (statements + verdicts).
+DELAY_BETWEEN_SAMPLES = 8  # seconds between agent runs
+DELAY_BETWEEN_JUDGE_CALLS = 12  # seconds between per-sample RAGAS judge calls
+JUDGE_RETRIES = 4  # attempts per RAGAS score on transient API errors
 
 
 def load_golden(path: Path) -> dict:
@@ -139,7 +143,7 @@ def _score_with_retry(metric, kwargs: dict, label: str) -> float:
     for attempt in range(1, JUDGE_RETRIES + 1):
         try:
             return _clean(metric.score(**kwargs).value)
-        except Exception as exc:  # noqa: BLE001 — any judge failure must not crash CI
+        except Exception as exc:
             if attempt == JUDGE_RETRIES:
                 print(f"  ❌ {label} failed after {JUDGE_RETRIES} attempts: {exc}")
                 return 0.0
@@ -162,7 +166,7 @@ def score_samples(samples: list, judge_llm, embeddings) -> list[dict]:
             answer, contexts = run_agent_question(
                 question, thread_id=f"ci_ragas_{i}"
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"  ❌ Agent run failed: {exc}")
             rows.append(
                 {

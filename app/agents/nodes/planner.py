@@ -43,9 +43,12 @@ def planner_node(state: AgentState):
             from langchain_groq import ChatGroq
 
             from app.config import settings
+            # llama-3.1-8b-instant misclassifies first-turn technical questions
+            # as CONVERSATIONAL (skipping retrieval entirely), so use the same
+            # 70b model as the responder's fallback for reliable intent routing.
             fallback_llm = ChatGroq(
                 api_key=settings.GROQ_API_KEY,
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 temperature=0
             )
             decision = fallback_llm.invoke(prompt).content.strip()
