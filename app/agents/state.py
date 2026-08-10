@@ -11,3 +11,4 @@ class AgentState(TypedDict):
     plan: List[str]
     status: str
     final_answer: str
+    retrieval_counts: dict

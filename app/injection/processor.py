@@ -2,6 +2,7 @@ import os
 import sys
 import uuid
 import json
+import pickle
 
 if sys.platform == "win32":
     try:
@@ -14,9 +15,11 @@ import logfire
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
+from rank_bm25 import BM25Okapi
 
 from app.config import settings
 from app.services.retrieval.jina_embedding import embed_texts, get_embedding_dim
+from app.services.retrieval.qdrant_service import BM25_INDEX_PATH, tokenize
 from app.injection.loaders.pdf import parse_pdf
 from app.injection.loaders.html import parse_html
 from app.injection.loaders.text import parse_text
@@ -42,6 +45,56 @@ def save_processed_locally(data: dict, source_type: str, filename: str) -> str:
     with open(dest, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return dest
+
+
+def build_bm25_index():
+    """
+    Rebuild a persistent BM25 lexical index over every locally saved chunk and
+    pickle it to BM25_INDEX_PATH, keeping it in sync with the Qdrant collection
+    after ingestion. Hybrid retrieval fuses these hits with vector hits via RRF.
+    """
+    with logfire.span("Building BM25 Index"):
+        if not os.path.isdir(PROCESSED_DATA_DIR):
+            logfire.warning("No processed data found; skipping BM25 index build.")
+            return
+
+        corpus = []
+        for root, _, files in os.walk(PROCESSED_DATA_DIR):
+            for name in sorted(files):
+                if not name.endswith(".json"):
+                    continue
+                path = os.path.join(root, name)
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except (json.JSONDecodeError, OSError) as e:
+                    logfire.warning(f"Could not read {path}: {e}")
+                    continue
+                source = data.get("filename", name)
+                source_type = data.get("source_type", "general")
+                for chunk in data.get("chunks", []):
+                    if chunk and chunk.strip():
+                        corpus.append({
+                            "text": chunk,
+                            "source": source,
+                            "source_type": source_type,
+                        })
+
+        if not corpus:
+            logfire.warning("No chunks to index; skipping BM25 index build.")
+            return
+
+        tokenized_corpus = [tokenize(chunk["text"]) for chunk in corpus]
+        bm25 = BM25Okapi(tokenized_corpus)
+
+        os.makedirs(PROCESSED_DATA_DIR, exist_ok=True)
+        with open(BM25_INDEX_PATH, "wb") as f:
+            pickle.dump(
+                {"index": bm25, "chunks": corpus},
+                f,
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+        logfire.info(f"Built BM25 index over {len(corpus)} chunks -> {BM25_INDEX_PATH}")
 
 
 def process_file(file_path: str, filename: str, source_type: str):
@@ -171,6 +224,9 @@ def run_universal_ingestion(base_dir: str, explicit_source_type: str = None, wip
                     else subdir
                 )
                 process_directory(os.path.join(base_dir, subdir), source_type)
+
+        # Keep the lexical index in sync with the freshly upserted vectors
+        build_bm25_index()
 
 
 if __name__ == "__main__":

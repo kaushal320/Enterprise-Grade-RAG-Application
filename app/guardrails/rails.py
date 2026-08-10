@@ -6,6 +6,12 @@ from langchain_groq import ChatGroq
 from app.config import settings
 from app.guardrails.colang_rules import GUARD_PROMPT
 
+# Guardrail result statuses returned by guard() as the 4th tuple element.
+STATUS_BLOCKED = "blocked"      # a rail fired; the query was rejected
+STATUS_CLEAN = "clean"          # guardrails ran and the query passed
+STATUS_ERROR = "error"          # guardrails errored and defaulted to pass (fail-open)
+STATUS_INACTIVE = "inactive"    # no guardrail chain available (no key / init failed)
+
 
 class GuardrailResult(BaseModel):
     """
@@ -24,6 +30,7 @@ class GuardrailResult(BaseModel):
 
 
 _guard_chain = None
+_rails_healthy = False  # False on init failure / runtime error; True after a successful check
 
 
 def initialize_rails() -> None:
@@ -32,7 +39,7 @@ def initialize_rails() -> None:
     Reads rules and prompts directly from app/guardrails/colang_rules.py.
     Memory footprint: ~30MB RAM (0 MB local PyTorch/SentenceTransformers download).
     """
-    global _guard_chain
+    global _guard_chain, _rails_healthy
 
     try:
         if settings.GROQ_API_KEY:
@@ -42,36 +49,58 @@ def initialize_rails() -> None:
                 temperature=0
             )
             _guard_chain = llm.with_structured_output(GuardrailResult)
+            _rails_healthy = True
             logfire.info("🛡️ Guardrails AI initialised (llama-3.1-8b-instant + Pydantic validation).")
         else:
             logfire.warning("⚠️ GROQ_API_KEY missing — Guardrails inactive.")
+            _rails_healthy = False
     except Exception as e:
         logfire.error(f"⚠️ Guardrails AI init failed: {e}")
         _guard_chain = None
+        _rails_healthy = False
 
 
-def guard(message: str) -> tuple[bool, str | None]:
+def rails_healthy() -> bool:
+    """
+    True if the guardrail chain is initialized and the last invocation succeeded.
+    Exposed via the /health endpoint so operators can see when rails are degraded.
+    """
+    return _rails_healthy
+
+
+def guard(message: str) -> tuple[bool, str | None, str | None, str]:
     """
     Validate a user message using the rules defined in colang_rules.py.
 
-    Returns:
-        (True,  clean_response) — a rail fired; return clean validated response,
-                                 skip RAG pipeline.
-        (False, None)           — query is clean/technical; proceed to LangGraph RAG.
+    Returns a 4-tuple: (fired, response, category, status)
+
+      fired=True   — a rail fired; `response` is the clean validated reply,
+                     `category` is one of GREETING/CAPABILITIES/FAREWELL/JAILBREAK/OFF_TOPIC,
+                     `status` is STATUS_BLOCKED.
+      fired=False  — query allowed; `status` distinguishes WHY so callers know
+                     whether the rails actually cleared it:
+                     STATUS_CLEAN    — guardrails ran and passed.
+                     STATUS_ERROR    — guardrails errored and defaulted to pass (fail-open).
+                     STATUS_INACTIVE — no guardrail chain available (missing key / init failed).
     """
+    global _rails_healthy
+
     if _guard_chain is None or not message:
-        return False, None
+        _rails_healthy = False
+        return False, None, None, STATUS_INACTIVE
 
     with logfire.span("🛡️ Guardrails Check"):
         try:
             res: GuardrailResult = _guard_chain.invoke(GUARD_PROMPT.format(query=message))
-            
+            _rails_healthy = True
+
             if res.is_blocked and res.response:
                 logfire.info(f"🛡️ Guardrails fired | category={res.category}")
-                return True, res.response.strip()
+                return True, res.response.strip(), res.category, STATUS_BLOCKED
 
             logfire.info("✅ Guardrails passed.")
-            return False, None
+            return False, None, None, STATUS_CLEAN
         except Exception as e:
+            _rails_healthy = False
             logfire.error(f"⚠️ Guardrails check error: {e}")
-            return False, None
+            return False, None, None, STATUS_ERROR

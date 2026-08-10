@@ -13,7 +13,7 @@ logfire.configure(token=os.getenv("LOGFIRE_TOKEN"))
 # Now safe to import app modules - logfire is already active
 from fastapi import FastAPI, Response
 from app.agents.graph import rag_agent
-from app.guardrails import initialize_rails, guard
+from app.guardrails import initialize_rails, guard, rails_healthy
 
 from pydantic import BaseModel
 from typing import Optional
@@ -36,6 +36,19 @@ def home():
     return {"message": "Enterprise LangGraph RAG API is live."}
 
 
+@app.get("/health")
+def health():
+    """
+    Liveness/readiness probe. Reports whether the guardrail layer is healthy
+    so operators (and the UI badge) can see when rails are degraded/fail-open.
+    """
+    return {
+        "status": "ok",
+        "service": "enterprise-rag-api",
+        "guardrails": {"healthy": rails_healthy()},
+    }
+
+
 @app.get("/graph")
 def get_graph_image():
     try:
@@ -48,20 +61,19 @@ def get_graph_image():
 def _call_guard(q: str):
     """
     Calls guard() and normalizes its return shape.
-    Supports either:
+    Supports:
       guard(q) -> (fired: bool, response: str)
       guard(q) -> (fired: bool, response: str, category: str)
-    so this works whether or not your guardrails.py already tracks a category
-    (your Logfire trace shows `category=GREETING`, so if guard() has that
-    internally, just have it return it as a 3rd value and it'll show up here).
+      guard(q) -> (fired: bool, response: str, category: str, status: str)
+    so this works with both the current 4-tuple and any older guard() that
+    returns fewer fields. `status` is one of blocked/clean/error/inactive.
     """
     result = guard(q)
-    if len(result) == 3:
-        fired, response, category = result
-    else:
-        fired, response = result
-        category = None
-    return fired, response, category
+    fired = result[0]
+    response = result[1]
+    category = result[2] if len(result) >= 3 else None
+    status = result[3] if len(result) >= 4 else ("blocked" if fired else "clean")
+    return fired, response, category, status
 
 
 @app.post("/query")
@@ -87,9 +99,9 @@ def query(request: QueryRequest):
     config = {"configurable": {"thread_id": thread_id}}
 
     try:
-        # ── Gate 1: NeMo Guardrails ──────────────────────────────
+        # ── Gate 1: Guardrails (Groq llama-3.1-8b-instant + Pydantic classifier) ──
         t0 = time.perf_counter()
-        rail_fired, rail_response, rail_category = _call_guard(q)
+        rail_fired, rail_response, rail_category, rail_status = _call_guard(q)
         guardrails_ms = round((time.perf_counter() - t0) * 1000)
 
         if rail_fired:
@@ -115,13 +127,20 @@ def query(request: QueryRequest):
                 "thought_process": ["Intent: Guardrails Fired", "Retrieval: Skipped"],
                 "status": "Blocked by guardrails.",
                 "sources": [],
+                "retrieval": None,
                 "guardrails": guardrails,
                 "pipeline": pipeline,
             }
 
+        # Fail-open visibility: the query is allowed even if the rail errored or
+        # is inactive, but surface a "degraded" state so callers/ops can see it.
+        guardrail_state = (
+            "degraded" if rail_status in ("error", "inactive") else "passed"
+        )
         guardrails = {
-            "status": "passed",
-            "category": None,
+            "status": guardrail_state,
+            "category": rail_category,
+            "detail": rail_status if guardrail_state == "degraded" else None,
             "duration_ms": guardrails_ms,
         }
 
@@ -152,6 +171,7 @@ def query(request: QueryRequest):
             "thought_process": plan,
             "status": final_output.get("status"),
             "sources": final_output.get("documents", []),
+            "retrieval": final_output.get("retrieval_counts"),
             "guardrails": guardrails,
             "pipeline": pipeline,
         }
@@ -164,6 +184,7 @@ def query(request: QueryRequest):
             "thought_process": ["Error encountered during execution."],
             "status": "error",
             "sources": [],
+            "retrieval": None,
             "guardrails": None,
             "pipeline": [
                 {"name": "Error", "detail": str(e)[:200], "status": "blocked"}

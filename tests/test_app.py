@@ -13,9 +13,11 @@ def test_config_loading():
 def test_guardrails_import():
     """Verify guardrails gate function imports and runs clean check."""
     from app.guardrails.rails import guard
-    is_blocked, response = guard("")
+    is_blocked, response, category, status = guard("")
     assert is_blocked is False
     assert response is None
+    assert category is None
+    assert status == "inactive"  # no chain -> fail-open inactive state
 
 
 def test_graph_import():

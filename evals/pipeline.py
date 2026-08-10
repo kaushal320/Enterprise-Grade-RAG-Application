@@ -12,7 +12,7 @@ import os
 import requests
 import logfire
 
-API_URL = "http://localhost:8000/query"
+API_URL = "http://localhost:8080/query"
 RESPONSE_TRUNCATE = 300
 DELAY_BETWEEN_CALLS = 10  # seconds — stays within Groq RPM on the main key
 REQUEST_TIMEOUT = 120  # seconds — guardrails + LangGraph + Groq can take >60s
@@ -77,6 +77,7 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
                     sample["actual_response"] = raw_answer[:RESPONSE_TRUNCATE]
                     sample["actual_contexts"] = sources[:5]
                     sample["actual_tools_called"] = [detect_tool(thought_process)]
+                    sample["retrieval_stats"] = data.get("retrieval") or {}
 
                     logfire.info(
                         "✅ Response captured",
@@ -87,17 +88,19 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
 
                 except requests.exceptions.ConnectionError:
                     logfire.error(
-                        "❌ Cannot reach FastAPI — is the app running on :8000?"
+                        "❌ Cannot reach FastAPI — is the app running on :8080?"
                     )
                     sample["actual_response"] = ""
                     sample["actual_contexts"] = sample.get("relevant_contexts", [])
                     sample["actual_tools_called"] = ["unknown"]
+                    sample["retrieval_stats"] = {}
 
                 except Exception as e:
                     logfire.error(f"❌ Query failed: {e}")
                     sample["actual_response"] = ""
                     sample["actual_contexts"] = sample.get("relevant_contexts", [])
                     sample["actual_tools_called"] = ["unknown"]
+                    sample["retrieval_stats"] = {}
 
             if progress_callback:
                 progress_callback(i, n, question, "done", sample["actual_response"])

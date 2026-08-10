@@ -171,12 +171,12 @@ with tab1:
 with tab2:
     st.subheader("Live Pipeline — Collect Real Responses")
     st.markdown(
-        "Sends each golden question to your **running FastAPI app** (`localhost:8000/query`). "
+        "Sends each golden question to your **running FastAPI app** (`localhost:8080/query`). "
         "Captures the actual response, retrieved contexts, and tool called. "
         "Responses are truncated to 300 chars to save tokens for the RAGAS judging step."
     )
     st.info(
-        "⚠️ Make sure your FastAPI backend is running first: `uvicorn app.main:app --reload --port 8000`",
+        "⚠️ Make sure your FastAPI backend is running first: `uvicorn app.main:app --reload --port 8080`",
         icon="⚠️",
     )
 
@@ -290,6 +290,7 @@ with tab2:
                 "Live Response": s["actual_response"][:100] + "..." if len(s.get("actual_response","")) > 100 else s.get("actual_response",""),
                 "Tool Called": s["actual_tools_called"][0] if s.get("actual_tools_called") else "—",
                 "Contexts Retrieved": len(s.get("actual_contexts", [])),
+                "Hybrid (BM25/Qdrant)": f"{s.get('retrieval_stats', {}).get('bm25', '—')} / {s.get('retrieval_stats', {}).get('qdrant', '—')}",
             })
         st.dataframe(pd.DataFrame(resp_rows), use_container_width=True, hide_index=True)
 

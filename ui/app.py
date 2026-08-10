@@ -78,6 +78,7 @@ st.markdown(
     }
     .badge-pass { background: rgba(48,164,108,0.15); color: #30a46c; border: 1px solid #30a46c; }
     .badge-block { background: rgba(229,72,77,0.15); color: #e5484d; border: 1px solid #e5484d; }
+    .badge-degraded { background: rgba(245,197,66,0.15); color: #f5c542; border: 1px solid #f5c542; }
 
     /* Chunk cards */
     .chunk-card {
@@ -169,12 +170,14 @@ def icon_for(step_name: str) -> str:
 
 
 def render_guardrails_badge(guardrails: dict):
-    """guardrails = {'status': 'passed'|'blocked', 'category': str, 'duration_ms': int}"""
+    """guardrails = {'status': 'passed'|'blocked'|'degraded', 'category': str, 'duration_ms': int}"""
     status = guardrails.get("status", "passed")
     category = guardrails.get("category")
     duration = guardrails.get("duration_ms")
     if status == "blocked":
         label = f'<span class="badge badge-block">🛡️ BLOCKED{f" · {category}" if category else ""}</span>'
+    elif status == "degraded":
+        label = '<span class="badge badge-degraded">🛡️ GUARDRAILS DEGRADED — FAILED OPEN</span>'
     else:
         label = '<span class="badge badge-pass">🛡️ GUARDRAILS PASSED</span>'
     if duration:
