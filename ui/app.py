@@ -24,7 +24,7 @@ try:
     token = os.getenv("LOGFIRE_TOKEN")
     logfire.configure(token=token)
     LOGFIRE_STATUS = "Connected & Tracing"
-except Exception as e:  # noqa: BLE001
+except Exception as e:
     LOGFIRE_STATUS = f"Standby (Error: {e})"
 
 # --- PAGE CONFIG ---

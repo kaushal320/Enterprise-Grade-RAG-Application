@@ -27,7 +27,7 @@ try:
     logfire.configure(token=st.secrets.get("LOGFIRE_TOKEN", os.getenv("LOGFIRE_TOKEN")))
     logfire.instrument_requests()
     LOGFIRE_STATUS = "Connected & Tracing"
-except (AttributeError, KeyError, Exception):  # noqa: BLE001
+except (AttributeError, KeyError, Exception):
     LOGFIRE_STATUS = "Standby (No Token)"
 
 # --- PAGE CONFIG ---
