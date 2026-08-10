@@ -17,7 +17,8 @@ Designed for enterprise technical documentation (Kubernetes, Intel Hardware, Ent
 * **🔍 Distributed Observability**: Deep tracing and telemetry integrated with **Pydantic Logfire** and **LangSmith**.
 * **📄 Universal Document Ingestion Processor**: Batch ingestion supporting PDF (`pypdf` + `pdfplumber`), HTML (`BeautifulSoup`), DOCX, PPTX, and TXT with smart token-boundary chunking.
 * **🎨 Modern Streamlit User Interface**: Interactive chat UI featuring live thought-process execution, source context inspection, session management, and automatic Render backend cold-start wake-up.
-* **🚀 Automated CI/CD Pipeline**: GitHub Actions workflow covering syntax linting (`ruff`), automated unit testing (`pytest`), and Docker container build verification.
+* **🚀 Automated CI/CD Pipeline**: GitHub Actions workflow covering syntax linting (`ruff`), automated unit testing (`pytest`), a static dataset-integrity eval gate, a live **RAGAS quality gate** (Faithfulness + Answer Relevancy ≥ 0.6), and Docker container build verification.
+* **📊 Quality Evaluation Suite**: A golden-dataset-driven eval harness (`evals/`) scoring RAGAS Faithfulness, Answer Relevancy, Context Precision/Recall, Answer Correctness, Tool Correctness, and guardrail precision/recall — see [`evals/EVAL_RESULTS.md`](evals/EVAL_RESULTS.md).
 
 ---
 
@@ -84,6 +85,15 @@ Enterprise-Grade-RAG-Application/
 │   │   └── retrieval/             # Qdrant search & Jina embedding/reranker services
 │   └── main.py                    # FastAPI application & REST endpoints
 ├── DATA/                          # Raw enterprise documents (PDF, HTML, TXT)
+├── evals/
+│   ├── golden_dataset.json        # 15 RAG + 6 guardrail golden samples
+│   ├── offline_gate.py            # Static dataset-integrity CI gate
+│   ├── ci_ragas_gate.py           # Live RAGAS CI gate (in-process agent)
+│   ├── pipeline.py                # Phase 1: live /query response capture
+│   ├── metrics.py                 # Phase 2: RAGAS + tool-correctness metrics
+│   ├── guardrails_eval.py         # Guardrail precision / recall
+│   ├── app.py                     # Streamlit evaluation UI
+│   └── EVAL_RESULTS.md            # Evaluation docs & latest results
 ├── tests/
 │   └── test_app.py                # Automated pytest suite
 ├── ui/
@@ -232,12 +242,27 @@ docker run -p 8501:8501 --env-file .env enterprise-rag-ui
 pytest tests/ -v
 ```
 
+### Run the Quality Gates Locally
+
+```bash
+# Static dataset-integrity gate (offline, no secrets)
+python evals/offline_gate.py --golden evals/golden_dataset.json
+
+# Live RAGAS gate — in-process agent, requires live secrets (GROQ / QDRANT / JINA)
+python evals/ci_ragas_gate.py --golden evals/golden_dataset.json
+```
+
 ### Automated GitHub Actions Workflow
 
-The CI workflow (`.github/workflows/ci.yml`) executes on every push to `main`:
+The CI workflow (`.github/workflows/ci.yml`) executes on every push/PR to `main`:
 1. **`lint-and-syntax`**: Validates code quality using `ruff`.
-2. **`unit-tests`**: Runs test suite against mock environment settings.
-3. **`docker-build-check`**: Validates backend and UI Docker builds.
+2. **`unit-tests`**: Runs the test suite against mock environment settings.
+3. **`eval-gate`**: Statically validates `evals/golden_dataset.json` (offline, no secrets).
+4. **`ragas-eval-gate`**: Runs the compiled LangGraph agent in-process on the first 3 golden samples and scores **RAGAS Faithfulness + Answer Relevancy** — fails the build if either average is below **0.6**. Requires live secrets (`GROQ_API_KEY`, `JUDGE_GROQ_KEY`, `QDRANT_API_KEY`, `QDRANT_URL`, `QDRANT_COLLECTION_NAME`, `JINA_API_KEY`, `PORTKEY_API_KEY`).
+5. **`docker-build-check`**: Validates backend and UI Docker builds (depends on all four jobs above).
+
+Full metric definitions, methodology, and the latest results are documented in
+[`evals/EVAL_RESULTS.md`](evals/EVAL_RESULTS.md).
 
 ---
 
