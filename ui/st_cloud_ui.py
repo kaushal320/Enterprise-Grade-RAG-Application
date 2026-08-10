@@ -1,12 +1,13 @@
 import os
-import streamlit as st
-import requests
-from requests.exceptions import RequestException
-from json import JSONDecodeError
 import time
 import uuid
+from json import JSONDecodeError
+
 import logfire
+import requests
+import streamlit as st
 from dotenv import load_dotenv
+from requests.exceptions import RequestException
 
 try:
     from ui.errors import BackendConnectionError, BackendTimeoutError
@@ -26,7 +27,7 @@ try:
     logfire.configure(token=st.secrets.get("LOGFIRE_TOKEN", os.getenv("LOGFIRE_TOKEN")))
     logfire.instrument_requests()
     LOGFIRE_STATUS = "Connected & Tracing"
-except (AttributeError, KeyError, Exception) as e:  # noqa: BLE001
+except (AttributeError, KeyError, Exception):  # noqa: BLE001
     LOGFIRE_STATUS = "Standby (No Token)"
 
 # --- PAGE CONFIG ---

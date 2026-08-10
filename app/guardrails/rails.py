@@ -1,7 +1,7 @@
+
 import logfire
-from typing import Optional
-from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
+from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.guardrails.colang_rules import GUARD_PROMPT
@@ -23,7 +23,7 @@ class GuardrailResult(BaseModel):
     category: str = Field(
         description="One of: 'GREETING', 'CAPABILITIES', 'FAREWELL', 'JAILBREAK', 'OFF_TOPIC', 'CLEAN'"
     )
-    response: Optional[str] = Field(
+    response: str | None = Field(
         default=None,
         description="The clean response string to return to the user if is_blocked is True. Must be null if category is CLEAN."
     )

@@ -1,12 +1,13 @@
-from app.config import settings
 import logfire
+
 from app.agents.state import AgentState
-from app.gateway import portkey_client, extract_cache_status
+from app.config import settings
+from app.gateway import extract_cache_status, portkey_client
 from app.services.cache.upstash_service import (
-    get_cache,
-    set_cache,
-    response_cache_key,
     RESPONSE_TTL_SECONDS,
+    get_cache,
+    response_cache_key,
+    set_cache,
 )
 
 

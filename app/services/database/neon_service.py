@@ -1,7 +1,8 @@
 """Neon Postgres Database Service for conversation logging & persistence."""
 
+
 import logfire
-from typing import Optional, List, Dict, Any
+
 from app.config import settings
 
 # Lazy connection pool / engine initialization

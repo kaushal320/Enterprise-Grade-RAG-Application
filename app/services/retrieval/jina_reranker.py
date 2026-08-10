@@ -7,7 +7,6 @@ import requests
 
 from app.config import settings
 
-
 _RERANK_URL = "https://api.jina.ai/v1/rerank"
 
 

@@ -5,12 +5,9 @@ import re
 import logfire
 import numpy as np
 from qdrant_client import QdrantClient
-from qdrant_client.http import models
-from rank_bm25 import BM25Okapi
 
 from app.config import settings
 from app.services.retrieval.jina_embedding import embed_query
-
 
 # Initialize Qdrant Client
 client = QdrantClient(

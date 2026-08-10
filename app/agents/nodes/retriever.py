@@ -1,19 +1,19 @@
 import hashlib
 
 import logfire
+
 from app.agents.state import AgentState
 from app.services.cache.upstash_service import (
-    get_cache,
-    set_cache,
-    retrieval_cache_key,
     RETRIEVAL_TTL_SECONDS,
-)
-from app.services.retrieval.qdrant_service import (
-    search_enterprise_knowledge,
-    bm25_search,
+    get_cache,
+    retrieval_cache_key,
+    set_cache,
 )
 from app.services.retrieval.jina_reranker import rerank_documents
-
+from app.services.retrieval.qdrant_service import (
+    bm25_search,
+    search_enterprise_knowledge,
+)
 
 _RRF_K = 60
 

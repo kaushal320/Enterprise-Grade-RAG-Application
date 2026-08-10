@@ -1,1 +1,1 @@
-from app.guardrails.rails import initialize_rails, guard, rails_healthy
+from app.guardrails.rails import guard, initialize_rails, rails_healthy

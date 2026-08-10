@@ -1,5 +1,3 @@
-import pytest
-import os
 from app.config import settings
 
 
@@ -29,8 +27,8 @@ def test_graph_import():
 def test_cache_key_helpers():
     """Verify stable Upstash cache key generation."""
     from app.services.cache.upstash_service import (
-        retrieval_cache_key,
         response_cache_key,
+        retrieval_cache_key,
     )
 
     assert retrieval_cache_key("Kubernetes pods") == retrieval_cache_key("kubernetes pods")

@@ -1,8 +1,8 @@
+import json
 import os
+import pickle
 import sys
 import uuid
-import json
-import pickle
 
 if sys.platform == "win32":
     try:
@@ -12,18 +12,17 @@ if sys.platform == "win32":
         pass
 
 import logfire
-
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from rank_bm25 import BM25Okapi
 
 from app.config import settings
+from app.injection.chunking.splitter import chunk_text
+from app.injection.loaders.html import parse_html
+from app.injection.loaders.pdf import parse_pdf
+from app.injection.loaders.text import parse_text
 from app.services.retrieval.jina_embedding import embed_texts, get_embedding_dim
 from app.services.retrieval.qdrant_service import BM25_INDEX_PATH, tokenize
-from app.injection.loaders.pdf import parse_pdf
-from app.injection.loaders.html import parse_html
-from app.injection.loaders.text import parse_text
-from app.injection.chunking.splitter import chunk_text
 
 logfire.configure(service_name="enterprise-ingestion-service")
 

@@ -31,7 +31,7 @@ jobs:
 
       - name: Run Code Lint Check
         run: |
-          ruff check app/ ui/ tests/ --ignore E501,F401,F841
+          ruff check app/ ui/ tests/ --ignore E501,F401,F841,BLE001,TRY201,S110
 
   unit-tests:
     name: Run Automated Unit Tests

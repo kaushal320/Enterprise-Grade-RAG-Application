@@ -1,12 +1,13 @@
 import os
-import streamlit as st
-import requests
-from requests.exceptions import RequestException
-from json import JSONDecodeError
 import time
 import uuid
+from json import JSONDecodeError
+
 import logfire
+import requests
+import streamlit as st
 from dotenv import load_dotenv
+from requests.exceptions import RequestException
 
 try:
     from ui.errors import BackendConnectionError, BackendTimeoutError

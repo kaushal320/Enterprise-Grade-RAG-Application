@@ -1,7 +1,8 @@
-from typing import List
+
 import logfire
 
-def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 200) -> List[str]:
+
+def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 200) -> list[str]:
     """
     Robust chunker that splits text by paragraphs and lines.
     Ensures no chunk exceeds `chunk_size` characters even if paragraphs lack double-newlines.

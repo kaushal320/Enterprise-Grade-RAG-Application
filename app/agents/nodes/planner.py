@@ -1,6 +1,7 @@
+import logfire
+
 from app.agents.state import AgentState
 from app.gateway import get_langchain_llm
-import logfire
 
 # Portkey-backed LLM: fallback + cache + retry — same .invoke() interface as ChatGroq
 llm = get_langchain_llm(feature="planner")
@@ -40,6 +41,7 @@ def planner_node(state: AgentState):
         except Exception as e:
             logfire.warning(f"Portkey planner call failed ({e}), using ChatGroq fallback.")
             from langchain_groq import ChatGroq
+
             from app.config import settings
             fallback_llm = ChatGroq(
                 api_key=settings.GROQ_API_KEY,

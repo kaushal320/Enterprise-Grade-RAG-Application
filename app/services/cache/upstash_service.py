@@ -5,9 +5,11 @@ Provides fast response caching for RAG queries and retrieval results.
 
 import hashlib
 import json
+from typing import Any
+
 import logfire
 import requests
-from typing import Optional, Any
+
 from app.config import settings
 
 RETRIEVAL_CACHE_PREFIX = "rag:retrieval:"
@@ -40,7 +42,7 @@ def _headers() -> dict[str, str]:
     }
 
 
-def get_cache(key: str) -> Optional[Any]:
+def get_cache(key: str) -> Any | None:
     """Retrieve a key from Upstash Redis REST API."""
     if not settings.UPSTASH_REDIS_REST_URL or not settings.UPSTASH_REDIS_REST_TOKEN:
         return None

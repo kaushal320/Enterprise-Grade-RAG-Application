@@ -7,7 +7,6 @@ import requests
 
 from app.config import settings
 
-
 _EMBEDDINGS_URL = "https://api.jina.ai/v1/embeddings"
 _BATCH_SIZE = 15
 
