@@ -58,10 +58,11 @@ DEFAULT_GOLDEN = Path(__file__).resolve().parent / "golden_dataset.json"
 DEFAULT_SAMPLES = 3
 DEFAULT_THRESHOLD = 0.6
 
-# llama-3.1-8b-instant is too weak as an NLI judge: it returns "unsupported"
-# for every claim even when the context explicitly contains it, collapsing
-# Faithfulness to 0.0. Use the 70b model so verdicts are actually grounded.
-JUDGE_MODEL = "openai/gpt-oss-20b"
+# gpt-oss-20b (and the old llama-3.1-8b-instant) are too weak as NLI judges:
+# they return "unsupported" for every claim even when the context explicitly
+# contains it, collapsing Faithfulness to 0.0. Use the 120b model so verdicts
+# are actually grounded.
+JUDGE_MODEL = "openai/gpt-oss-120b"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 JINA_BASE_URL = "https://api.jina.ai/v1"
 JINA_EMBEDDING_MODEL = "jina-embeddings-v3"
