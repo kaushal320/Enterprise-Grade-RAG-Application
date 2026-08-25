@@ -5,7 +5,6 @@ Captures: actual_response (truncated to 300 chars), actual_contexts (from source
 and actual_tools_called (detected from thought_process).
 """
 
-
 import time
 import copy
 import json
@@ -13,12 +12,10 @@ import os
 import requests
 import logfire
 
-API_URL = "http://localhost:8000/query"
+API_URL = "http://localhost:8080/query"
 RESPONSE_TRUNCATE = 300
-DELAY_BETWEEN_CALLS = 10   # seconds — stays within Groq RPM on the main key
-REQUEST_TIMEOUT = 120      # seconds — guardrails + LangGraph + Groq can take >60s
-
-
+DELAY_BETWEEN_CALLS = 10  # seconds — stays within Groq RPM on the main key
+REQUEST_TIMEOUT = 120  # seconds — guardrails + LangGraph + Groq can take >60s
 
 
 def detect_tool(thought_process: list) -> str:
@@ -31,7 +28,11 @@ def detect_tool(thought_process: list) -> str:
     joined = " ".join(thought_process).lower()
     if "guardrails fired" in joined:
         return "guardrails"
-    if "intent: technical" in joined or "search term:" in joined or "context retrieved" in joined:
+    if (
+        "intent: technical" in joined
+        or "search term:" in joined
+        or "context retrieved" in joined
+    ):
         return "retrieve_documents"
     if "conversational" in joined or "memory" in joined:
         return "direct_answer"
@@ -76,6 +77,7 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
                     sample["actual_response"] = raw_answer[:RESPONSE_TRUNCATE]
                     sample["actual_contexts"] = sources[:5]
                     sample["actual_tools_called"] = [detect_tool(thought_process)]
+                    sample["retrieval_stats"] = data.get("retrieval") or {}
 
                     logfire.info(
                         "✅ Response captured",
@@ -85,16 +87,20 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
                     )
 
                 except requests.exceptions.ConnectionError:
-                    logfire.error("❌ Cannot reach FastAPI — is the app running on :8000?")
+                    logfire.error(
+                        "❌ Cannot reach FastAPI — is the app running on :8080?"
+                    )
                     sample["actual_response"] = ""
                     sample["actual_contexts"] = sample.get("relevant_contexts", [])
                     sample["actual_tools_called"] = ["unknown"]
+                    sample["retrieval_stats"] = {}
 
                 except Exception as e:
                     logfire.error(f"❌ Query failed: {e}")
                     sample["actual_response"] = ""
                     sample["actual_contexts"] = sample.get("relevant_contexts", [])
                     sample["actual_tools_called"] = ["unknown"]
+                    sample["retrieval_stats"] = {}
 
             if progress_callback:
                 progress_callback(i, n, question, "done", sample["actual_response"])
@@ -108,9 +114,9 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
 def save_results(dataset: dict, path: str) -> None:
     with open(path, "w") as f:
         json.dump(dataset, f, indent=2)
-        
-        
+
+
 def load_golden_dataset() -> dict:
     golden_path = os.path.join(os.path.dirname(__file__), "golden_dataset.json")
-    with open(golden_path) as f:
+    with open(golden_path, "r", encoding="utf-8") as f:
         return json.load(f)

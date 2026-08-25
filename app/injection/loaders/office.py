@@ -1,6 +1,7 @@
 import logfire
 from unstructured.partition.auto import partition
 
+
 def parse_office(file_path: str):
     """
     Parses Office documents (.docx, .pptx) using the Unstructured library.

@@ -1,0 +1,42 @@
+# ==============================================================================
+# PRODUCTION REQUIREMENTS — Hosted API Services
+# All AI models (Embeddings, Reranker, LLM) run hosted in the cloud.
+# ==============================================================================
+
+# --- CORE API ---
+fastapi
+uvicorn[standard]
+python-dotenv
+requests
+numpy
+pytz
+
+# --- SEARCH ---
+rank-bm25
+
+# --- DATABASE & CACHE ---
+qdrant-client
+sqlalchemy
+psycopg2-binary
+
+# --- LANGCHAIN & AGENTIC ORCHESTRATION ---
+langchain
+langgraph
+langchain-google-genai
+langchain-groq
+langchain-community
+langchain-openai
+pydantic>=2.0.0
+
+# --- LLM GATEWAY ---
+portkey-ai
+
+# --- OBSERVABILITY ---
+langsmith
+logfire[fastapi,requests]
+
+# --- INGESTION PARSERS ---
+python-pptx
+python-docx
+pypdf
+beautifulsoup4
