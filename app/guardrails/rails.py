@@ -35,7 +35,7 @@ _rails_healthy = False  # False on init failure / runtime error; True after a su
 
 def initialize_rails() -> None:
     """
-    Initialize Guardrails AI with Pydantic structured validation using Groq llama-3.1-8b-instant.
+    Initialize Guardrails AI with Pydantic structured validation using Groq openai/gpt-oss-20b.
     Reads rules and prompts directly from app/guardrails/colang_rules.py.
     Memory footprint: ~30MB RAM (0 MB local PyTorch/SentenceTransformers download).
     """
@@ -45,12 +45,12 @@ def initialize_rails() -> None:
         if settings.GROQ_API_KEY:
             llm = ChatGroq(
                 api_key=settings.GROQ_API_KEY,
-                model="llama-3.1-8b-instant",
+                model="openai/gpt-oss-20b",
                 temperature=0
             )
             _guard_chain = llm.with_structured_output(GuardrailResult)
             _rails_healthy = True
-            logfire.info("🛡️ Guardrails AI initialised (llama-3.1-8b-instant + Pydantic validation).")
+            logfire.info("🛡️ Guardrails AI initialised (openai/gpt-oss-20b + Pydantic validation).")
         else:
             logfire.warning("⚠️ GROQ_API_KEY missing — Guardrails inactive.")
             _rails_healthy = False
