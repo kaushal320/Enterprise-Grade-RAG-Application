@@ -74,7 +74,10 @@ def generate_node(state: AgentState):
 
         prompt = f"""
         You are a Senior Technical Architect.
-        Answer the question using the TECHNICAL CONTEXT provided.
+        Answer the question using ONLY the TECHNICAL CONTEXT provided below.
+        Do NOT use any outside knowledge or make assumptions not supported by the context.
+        If the context does not contain enough information, say "I don't have enough information in the provided context to answer this question."
+        Every sentence in your answer must be directly supported by the TECHNICAL CONTEXT.
 
         TECHNICAL CONTEXT:
         {full_context}
