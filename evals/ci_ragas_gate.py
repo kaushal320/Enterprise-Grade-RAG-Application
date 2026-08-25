@@ -72,8 +72,8 @@ CONTENT_PREFIX = "CONTENT: "  # prefix retrieve_node prepends to every document
 # Judge inputs are trimmed (mirroring evals/metrics.py) to stay inside the
 # Groq 70b on_demand tokens-per-day cap (~100k): fewer samples + only the
 # top-2 contexts at 300 chars each keeps a full gate run near ~17k tokens.
-CONTEXT_TRUNCATE = 300  # chars per context chunk passed to the judge
-CONTEXT_LIMIT = 2       # max context chunks passed to the judge
+CONTEXT_TRUNCATE = 1500  # chars per context chunk passed to the judge
+CONTEXT_LIMIT = 5       # max context chunks passed to the judge
 
 # The 70b judge (and the agent's 70b planner/responder) all draw on the same
 # Groq budget. Interleave calls so no 60s TPM window overflows — Faithfulness
