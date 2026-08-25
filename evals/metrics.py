@@ -26,7 +26,7 @@ from ragas.metrics.collections import (
 )
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-JUDGE_MODEL = "openai/gpt-oss-20b"
+JUDGE_MODEL = "llama-3.3-70b-versatile"
 COOLDOWN_STANDARD = 62
 COOLDOWN_MINI = 40       # between individual samples — lets sliding TPM window recover (~2,800 tok/sample)
 GENERAL_BATCH_SIZE = 1  # one sample at a time: abatch_score fires calls concurrently per sample,
@@ -39,6 +39,7 @@ def _build_judge():
     api_key = os.getenv("JUDGE_GROQ") or os.getenv("GROQ_API_KEY")
     client = AsyncOpenAI(api_key=api_key, base_url=GROQ_BASE_URL)
     llm = llm_factory(JUDGE_MODEL, provider="openai", client=client)
+    llm.model_args["max_tokens"] = 4096
     embeddings = HuggingFaceEmbeddings(
         model="sentence-transformers/all-MiniLM-L6-v2",
         use_api=False,
