@@ -48,7 +48,7 @@ def planner_node(state: AgentState):
             # 70b model as the responder's fallback for reliable intent routing.
             fallback_llm = ChatGroq(
                 api_key=settings.GROQ_API_KEY,
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-20b",
                 temperature=0
             )
             decision = fallback_llm.invoke(prompt).content.strip()

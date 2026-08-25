@@ -90,7 +90,7 @@ def generate_node(state: AgentState):
         try:
             if settings.PORTKEY_API_KEY and settings.GROQ_SLUG:
                 response = portkey_client.chat.completions.create(
-                    model=f"@{settings.GROQ_SLUG}/llama-3.3-70b-versatile",
+                    model=f"@{settings.GROQ_SLUG}/openai/gpt-oss-20b",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.1,
                 )
@@ -104,7 +104,7 @@ def generate_node(state: AgentState):
             from langchain_groq import ChatGroq
             fallback_llm = ChatGroq(
                 api_key=settings.GROQ_API_KEY,
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-20b",
                 temperature=0.1
             )
             content = fallback_llm.invoke(prompt).content
