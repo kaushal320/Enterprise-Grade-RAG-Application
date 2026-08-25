@@ -61,7 +61,7 @@ DEFAULT_THRESHOLD = 0.6
 # llama-3.1-8b-instant is too weak as an NLI judge: it returns "unsupported"
 # for every claim even when the context explicitly contains it, collapsing
 # Faithfulness to 0.0. Use the 70b model so verdicts are actually grounded.
-JUDGE_MODEL = "llama-3.3-70b-versatile"
+JUDGE_MODEL = "openai/gpt-oss-20b"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 JINA_BASE_URL = "https://api.jina.ai/v1"
 JINA_EMBEDDING_MODEL = "jina-embeddings-v3"
@@ -122,7 +122,9 @@ def build_judge():
     if not api_key:
         raise RuntimeError("JUDGE_GROQ_KEY (or JUDGE_GROQ/GROQ_API_KEY) must be set.")
     client = AsyncOpenAI(api_key=api_key, base_url=GROQ_BASE_URL)
-    return llm_factory(JUDGE_MODEL, provider="openai", client=client)
+    llm = llm_factory(JUDGE_MODEL, provider="openai", client=client)
+    llm.model_args["max_tokens"] = 4096
+    return llm
 
 
 def build_embeddings():
